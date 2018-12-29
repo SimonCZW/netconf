@@ -74,6 +74,13 @@ public class NetconfTopologyImpl extends AbstractNetconfTopology
         }
     }
 
+    /**
+     * 在父类AbstractNetconfTopology createDeviceCommunicator创建与底层device communicator过程中调用
+     *
+     * 创建SalFacade, 即封装对device的类? 调用链深，最终做了几个事：
+     *  1.netconf node写入operational yang
+     *  2.创建MountInstace/NetconfDeviceToplogyAdapter等对象等待device连上控制器回调处理
+     */
     @Override
     protected RemoteDeviceHandler<NetconfSessionPreferences> createSalFacade(final RemoteDeviceId id) {
         return new NetconfDeviceSalFacade(id, mountPointService, dataBroker);
@@ -81,6 +88,7 @@ public class NetconfTopologyImpl extends AbstractNetconfTopology
 
     /**
      * Invoked by blueprint.
+     * 在Netconf-topology.xml中被调用
      */
     public void init() {
         final WriteTransaction wtx = dataBroker.newWriteOnlyTransaction();
@@ -99,6 +107,8 @@ public class NetconfTopologyImpl extends AbstractNetconfTopology
         });
 
         LOG.debug("Registering datastore listener");
+        // topologyId在Netconf-topology.xml中传入，值为topology-netconf
+        // 注册监听network-topology yang中 topology-netconf的node节点
         datastoreListenerRegistration =
                 dataBroker.registerDataTreeChangeListener(
                         new DataTreeIdentifier<>(LogicalDatastoreType.CONFIGURATION,
@@ -134,6 +144,9 @@ public class NetconfTopologyImpl extends AbstractNetconfTopology
         }
     }
 
+    /**
+     * 创建topology-netconf
+     */
     private void initTopology(final WriteTransaction wtx, final LogicalDatastoreType datastoreType) {
         final NetworkTopology networkTopology = new NetworkTopologyBuilder().build();
         final InstanceIdentifier<NetworkTopology> networkTopologyId =

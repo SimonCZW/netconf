@@ -55,6 +55,12 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+/**
+ * MessageTransformer是用于将控制层传入的yang normalized node对象 翻译为 对应netconf RPC数据结构的NetconfMessage对象。
+ * MessageTransformer在NetconfDevice中创建。
+ *  传入已经在netconf交互过程中学习到的yang rpc(SchemaContext)作为参数 或者 传入基础netconf rpc的(SchemaContext)作为参数，
+ *  使其拥有对应对应netconf rpc, NetconfMassage数据结构以及 normalized node对象的映射
+ */
 public class NetconfMessageTransformer implements MessageTransformer<NetconfMessage> {
 
     private static final Logger LOG = LoggerFactory.getLogger(NetconfMessageTransformer.class);

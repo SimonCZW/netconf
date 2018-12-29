@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Created by adetalhouet on 2016-11-03.
+ * 在Netconf-topology.xml中被实例化并注入OSGi
  */
 public class NetconfConnectorFactoryImpl implements NetconfConnectorFactory {
 

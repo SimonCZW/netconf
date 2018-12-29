@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
+import javafx.util.Callback;
 import javax.annotation.concurrent.GuardedBy;
 import org.opendaylight.controller.md.sal.dom.api.DOMNotification;
 import org.opendaylight.controller.md.sal.dom.api.DOMRpcException;
@@ -137,8 +138,10 @@ public class NetconfDevice
         setConnected(true);
         LOG.debug("{}: Session to remote device established with {}", id, remoteSessionCapabilities);
 
+        // 基本的netconf标准rpc
         final NetconfDeviceRpc initRpc =
                 getRpcForInitialization(listener, remoteSessionCapabilities.isNotificationsSupported());
+        // todo: 应该是与底层交互具体信息过程?
         final DeviceSourcesResolver task =
                 new DeviceSourcesResolver(remoteSessionCapabilities, id, stateSchemasResolver, initRpc);
         final ListenableFuture<DeviceSources> sourceResolverFuture = processingExecutor.submit(task);
@@ -147,7 +150,12 @@ public class NetconfDevice
             registerToBaseNetconfStream(initRpc, listener);
         }
 
+        /**
+         * 其次会在netconf协商后（学习到device自身的额外支出的Rpc），回调。干了几个事：
+         * 1.构建device特有的RPC对于的NetconfDeviceRpc对象(同时添加包括标准的netconf rpc)，并注册到DOMMountPointService
+         */
         final FutureCallback<DeviceSources> resolvedSourceCallback = new FutureCallback<DeviceSources>() {
+            // todo: 返回的DeviceSources应该是与底层交互的结果
             @Override
             public void onSuccess(final DeviceSources result) {
                 addProvidedSourcesToSchemaRegistry(result);
@@ -219,12 +227,20 @@ public class NetconfDevice
         //NetconfDevice.SchemaSetup can complete after NetconfDeviceCommunicator was closed. In that case do nothing,
         //since salFacade.onDeviceDisconnected was already called.
         if (connected) {
+            // 除了device特有的netconf rpc, 增加netconf标准的rpc
             final BaseSchema baseSchema =
                 remoteSessionCapabilities.isNotificationsSupported()
                         ? BaseSchema.BASE_NETCONF_CTX_WITH_NOTIFICATIONS : BaseSchema.BASE_NETCONF_CTX;
             messageTransformer = new NetconfMessageTransformer(result, true, baseSchema);
-
             updateTransformer(messageTransformer);
+
+            /*
+                这里调用了NetconfDeviceSalFacade中的onDeviceConnected方法，效果：
+                    1.实例化NetconfDeviceDataBroker对象（DOMDataBroker）
+                    2.实例化NetconfDeviceNotificationService对象
+                    3.更新operational topology-netconf yang中node的连接状态以及capabilities
+                    4.在DOMMountPointService注册当前device节点的DOMMountPoint，DOMMountPoint中传入了DOMDataBroker/DOMRpcService/DOMNotifactionService
+             */
             // salFacade.onDeviceConnected has to be called before the notification handler is initialized
             salFacade.onDeviceConnected(result, remoteSessionCapabilities, deviceRpc);
             notificationHandler.onRemoteSchemaUp(messageTransformer);
@@ -491,6 +507,8 @@ public class NetconfDevice
                             schemaContextFactory.createSchemaContext(requiredSources);
                     final SchemaContext result = schemaBuilderFuture.checkedGet();
                     LOG.debug("{}: Schema context built successfully from {}", id, requiredSources);
+
+                    // 解析底层device支持的capabilities
                     final Collection<QName> filteredQNames = Sets.difference(deviceSources.getRequiredSourcesQName(),
                             capabilities.getUnresolvedCapabilites().keySet());
                     capabilities.addCapabilities(filteredQNames.stream().map(entry -> new AvailableCapabilityBuilder()
@@ -504,6 +522,11 @@ public class NetconfDevice
                                             remoteSessionCapabilities.getNonModuleBasedCapsOrigin().get(entry)).build())
                             .collect(Collectors.toList()));
 
+                    /*
+                     * 初始化：包括注册DOMMountPoint、修改operational YANG状态connected/登记capabilities等操作
+                     *
+                     * 可以看到这里getDeviceSpecificRpc，是获取device特有的netconf rpc, 不包括标准rpc
+                     */
                     handleSalInitializationSuccess(result, remoteSessionCapabilities, getDeviceSpecificRpc(result));
                     return;
                 } catch (final SchemaResolutionException e) {
@@ -572,7 +595,13 @@ public class NetconfDevice
             return resolutionException.getResolvedSources();
         }
 
+        /*
+         * 获取device特有的netconf rpc, 不包括标准netconf rpc
+         *
+         * 根据解析的SchemaContext创建NetconfDeviceRpc对象
+         */
         protected NetconfDeviceRpc getDeviceSpecificRpc(final SchemaContext result) {
+            // 先创建NetconfMessageTransformer对象，用于后续转换yang node object对象为netconfmessage
             return new NetconfDeviceRpc(result, listener, new NetconfMessageTransformer(result, true));
         }
 

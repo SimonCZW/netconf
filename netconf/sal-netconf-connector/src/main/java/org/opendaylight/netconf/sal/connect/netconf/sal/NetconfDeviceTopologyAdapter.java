@@ -70,9 +70,13 @@ public final class NetconfDeviceTopologyAdapter implements AutoCloseable {
         this.topologyListPath = networkTopologyPath
                 .child(Topology.class, new TopologyKey(new TopologyId(TopologyNetconf.QNAME.getLocalName())));
 
+        // 写operational yang
         initDeviceData();
     }
 
+    /**
+     * 将NetconfNode通过BindingTransactionChain写入到Operational的topology-netconf yang中
+     */
     private void initDeviceData() {
         final WriteTransaction writeTx = txChain.newWriteOnlyTransaction();
 
@@ -98,6 +102,13 @@ public final class NetconfDeviceTopologyAdapter implements AutoCloseable {
         commitTransaction(writeTx, "init");
     }
 
+    /**
+     * 在NetconfDeviceSalFacade的onDeviceConnected调用
+     *
+     * 当device连上控制器，更新operational topology-netconf yang中netconfNode中的几个值：
+     * 1.连接状态status，更新为connected
+     * 2.更新节点的AvailableCapabilities和UnavailableCapabilities
+     */
     public void updateDeviceData(final boolean up, final NetconfDeviceCapabilities capabilities) {
         final NetconfNode data = buildDataForNetconfNode(up, capabilities);
 

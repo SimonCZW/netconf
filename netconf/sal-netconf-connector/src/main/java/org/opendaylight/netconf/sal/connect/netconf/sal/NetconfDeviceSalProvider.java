@@ -56,10 +56,12 @@ public class NetconfDeviceSalProvider implements AutoCloseable {
     public NetconfDeviceSalProvider(final RemoteDeviceId deviceId, final DOMMountPointService mountService,
                                     final DataBroker dataBroker) {
         this.id = deviceId;
+        // 内部类
         mountInstance = new MountInstance(mountService, id);
         this.dataBroker = dataBroker;
         txChain = Preconditions.checkNotNull(dataBroker).createTransactionChain(transactionChainListener);
 
+        // 将netconf node写入到operational yang
         topologyDatastoreAdapter = new NetconfDeviceTopologyAdapter(id, txChain);
     }
 
@@ -114,6 +116,12 @@ public class NetconfDeviceSalProvider implements AutoCloseable {
             this.id = Preconditions.checkNotNull(id);
         }
 
+        /**
+         * 在 NetconfDeviceSalFacade.onDeviceConnected() 中调用此方法
+         *
+         * 当设备与控制器建立连接，会创建DOMMountPoint对象并设置DOMDataBroker/DOMRpcService/DOMNotificationService，
+         * 最后将DOMMountPoint注册到DOMMountPointService中供上层应用使用
+         */
         public synchronized void onTopologyDeviceConnected(final SchemaContext initialCtx,
                                                            final DOMDataBroker broker, final DOMRpcService rpc,
                                                            final NetconfDeviceNotificationService notificationService) {
