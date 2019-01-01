@@ -164,12 +164,14 @@ public class NetconfTopologyManager
         final ServiceGroupIdentifier serviceGroupIdent =
                 ServiceGroupIdentifier.create(instanceIdentifier.toString());
 
+        // 创建NetconfTopologyContext
         final NetconfTopologyContext newNetconfTopologyContext = newNetconfTopologyContext(
                 createSetup(instanceIdentifier, node), serviceGroupIdent, actorResponseWaitTime);
 
         int tries = 3;
         while (true) {
             try {
+                // 注册singleton service
                 final ClusterSingletonServiceRegistration clusterSingletonServiceRegistration =
                         clusterSingletonServiceProvider.registerClusterSingletonService(newNetconfTopologyContext);
                 clusterRegistrations.put(instanceIdentifier, clusterSingletonServiceRegistration);

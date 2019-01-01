@@ -116,6 +116,7 @@ public class RemoteDeviceConnectorImpl implements RemoteDeviceConnector {
         final NetconfClientSessionListener netconfClientSessionListener = deviceCommunicatorDTO.getSessionListener();
         final NetconfReconnectingClientConfiguration clientConfig =
                 getClientConfig(netconfClientSessionListener, netconfNode);
+        // 创建连接，主动连接底层device
         final ListenableFuture<NetconfDeviceCapabilities> future = deviceCommunicator
                 .initializeRemoteConnection(netconfTopologyDeviceSetup.getNetconfClientDispatcher(), clientConfig);
 
@@ -158,6 +159,7 @@ public class RemoteDeviceConnectorImpl implements RemoteDeviceConnector {
         RemoteDeviceHandler<NetconfSessionPreferences> salFacade = deviceHandler;
         if (keepaliveDelay > 0) {
             LOG.info("{}: Adding keepalive facade.", remoteDeviceId);
+            // 把MasterSalFacade作为参数传入
             salFacade = new KeepaliveSalFacade(remoteDeviceId, salFacade,
                     netconfTopologyDeviceSetup.getKeepaliveExecutor().getExecutor(), keepaliveDelay,
                     defaultRequestTimeoutMillis);

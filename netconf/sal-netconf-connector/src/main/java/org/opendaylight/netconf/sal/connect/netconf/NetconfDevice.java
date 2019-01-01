@@ -126,6 +126,9 @@ public class NetconfDevice
         this.notificationHandler = new NotificationHandler(salFacade, id);
     }
 
+    /**
+     * 调用这里的时候已经与底层hello交互协商好了netconf协议
+     */
     @Override
     public void onRemoteSessionUp(final NetconfSessionPreferences remoteSessionCapabilities,
                                   final NetconfDeviceCommunicator listener) {
@@ -140,7 +143,7 @@ public class NetconfDevice
         // 基本的netconf标准rpc
         final NetconfDeviceRpc initRpc =
                 getRpcForInitialization(listener, remoteSessionCapabilities.isNotificationsSupported());
-        // todo: 应该是与底层交互具体信息过程?
+        // 解析底层device提供的能力，最终存储到DeviceSources对象
         final DeviceSourcesResolver task =
                 new DeviceSourcesResolver(remoteSessionCapabilities, id, stateSchemasResolver, initRpc);
         final ListenableFuture<DeviceSources> sourceResolverFuture = processingExecutor.submit(task);
@@ -151,13 +154,16 @@ public class NetconfDevice
 
         /**
          * 其次会在netconf协商后（学习到device自身的额外支出的Rpc），回调。干了几个事：
-         * 1.构建device特有的RPC对于的NetconfDeviceRpc对象(同时添加包括标准的netconf rpc)，并注册到DOMMountPointService
+         * 1.将底层设备提供的netconf rpc能力注册到schemaRegistry
+         * 2.构建device特有的RPC对于的NetconfDeviceRpc对象(同时添加包括标准的netconf rpc)，并注册到DOMMountPointService
          */
         final FutureCallback<DeviceSources> resolvedSourceCallback = new FutureCallback<DeviceSources>() {
             // todo: 返回的DeviceSources应该是与底层交互的结果
             @Override
             public void onSuccess(final DeviceSources result) {
+                // 将底层设备提供的netconf rpc注册到schemaRegistry
                 addProvidedSourcesToSchemaRegistry(result);
+                // 相关设置到系统：写yang / 注册MountPointService
                 setUpSchema(result);
             }
 
@@ -235,7 +241,7 @@ public class NetconfDevice
             updateTransformer(messageTransformer);
 
             /*
-                这里调用了NetconfDeviceSalFacade中的onDeviceConnected方法，效果：
+                这里调用了NetconfDeviceSalFacade(非集群)/MasterSalFacade(集群)中的onDeviceConnected方法，效果：
                     1.实例化NetconfDeviceDataBroker对象（DOMDataBroker）
                     2.实例化NetconfDeviceNotificationService对象
                     3.更新operational topology-netconf yang中node的连接状态以及capabilities
@@ -274,6 +280,7 @@ public class NetconfDevice
         this.connected = connected;
     }
 
+    // 将底层设备提供的netconf rpc能力都注册到schemaRegistry
     private void addProvidedSourcesToSchemaRegistry(final DeviceSources deviceSources) {
         final SchemaSourceProvider<YangTextSchemaSource> yangProvider = deviceSources.getSourceProvider();
         for (final SourceIdentifier sourceId : deviceSources.getProvidedSources()) {
@@ -375,7 +382,9 @@ public class NetconfDevice
             LOG.debug("{}: Schemas exposed by ietf-netconf-monitoring: {}", id,
                     availableSchemas.getAvailableYangSchemasQNames());
 
+            // 标准的netconf rpc
             final Set<QName> requiredSources = Sets.newHashSet(remoteSessionCapabilities.getModuleBasedCaps());
+            // 底层device提供的rpc
             final Set<QName> providedSources = availableSchemas.getAvailableYangSchemasQNames();
 
             final Set<QName> requiredSourcesNotProvided = Sets.difference(requiredSources, providedSources);
@@ -390,6 +399,7 @@ public class NetconfDevice
             // This clashes with the option of a user to specify supported yang models manually in configuration
             // for netconf-connector and as a result one is not able to fully override yang models of a device.
             // It is only possible to add additional models.
+            // 底层提供了额外的rpc(除了标准netconf rpc)
             final Set<QName> providedSourcesNotRequired = Sets.difference(providedSources, requiredSources);
             if (!providedSourcesNotRequired.isEmpty()) {
                 LOG.warn("{}: Netconf device provides additional yang models not reported in "
@@ -407,12 +417,15 @@ public class NetconfDevice
                 sourceProvider = new NetconfRemoteSchemaYangSourceProvider(id, deviceRpc);
             }
 
+            // 记录底层device的所有netconf rpc(capabilities)
             return new DeviceSources(requiredSources, providedSources, sourceProvider);
         }
     }
 
     /**
      * Contains RequiredSources - sources from capabilities.
+     *
+     * 记录底层device的所有netconf rpc(capabilities)
      */
     private static final class DeviceSources {
         private final Set<QName> requiredSources;
@@ -471,6 +484,7 @@ public class NetconfDevice
         @Override
         public void run() {
 
+            // 设备所有rpc能力，包括基础netconf rpc以及底层device提供的额外的netconf rpc能力
             final Collection<SourceIdentifier> requiredSources = deviceSources.getRequiredSources();
             final Collection<SourceIdentifier> missingSources = filterMissingSources(requiredSources);
 

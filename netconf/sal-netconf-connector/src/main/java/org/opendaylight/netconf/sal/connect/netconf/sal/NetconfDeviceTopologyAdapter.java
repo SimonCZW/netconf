@@ -124,6 +124,10 @@ public final class NetconfDeviceTopologyAdapter implements AutoCloseable {
         commitTransaction(writeTx, "update");
     }
 
+    /**
+     * 在MasterSalFacade中onDeviceConnected调用，只会在集群的device的master节点才会调用
+     * 与上一非集群的区别是，当前的NetconfNode对象还包括了"masterAddress"
+     */
     public void updateClusteredDeviceData(final boolean up, final String masterAddress,
                                           final NetconfDeviceCapabilities capabilities) {
         final NetconfNode data = buildDataForNetconfClusteredNode(up, masterAddress, capabilities);
@@ -192,6 +196,7 @@ public final class NetconfDeviceTopologyAdapter implements AutoCloseable {
                 .setConnectionStatus(up ? ConnectionStatus.Connected : ConnectionStatus.Connecting)
                 .setAvailableCapabilities(avCapabalitiesBuilder.build())
                 .setUnavailableCapabilities(unavailableCapabilities(capabilities.getUnresolvedCapabilites()))
+                // 额外的netconf master node
                 .setClusteredConnectionStatus(
                         new ClusteredConnectionStatusBuilder().setNetconfMasterNode(masterNodeAddress).build());
 

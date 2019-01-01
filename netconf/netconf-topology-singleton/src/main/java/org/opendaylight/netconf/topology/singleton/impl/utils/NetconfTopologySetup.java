@@ -22,6 +22,9 @@ import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import scala.concurrent.duration.Duration;
 
+/**
+ * 用于记录netconf node集群下的相关变量
+ */
 public class NetconfTopologySetup {
 
     private final ClusterSingletonServiceProvider clusterSingletonServiceProvider;

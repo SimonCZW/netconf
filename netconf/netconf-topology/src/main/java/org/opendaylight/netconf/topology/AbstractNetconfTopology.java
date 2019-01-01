@@ -240,6 +240,7 @@ public abstract class AbstractNetconfTopology implements NetconfTopology {
         final NetconfClientSessionListener netconfClientSessionListener = deviceCommunicatorDTO.getSessionListener();
         final NetconfReconnectingClientConfiguration clientConfig =
                 getClientConfig(netconfClientSessionListener, netconfNode);
+        // 创建连接，主动连接底层device
         final ListenableFuture<NetconfDeviceCapabilities> future =
                 deviceCommunicator.initializeRemoteConnection(clientDispatcher, clientConfig);
 

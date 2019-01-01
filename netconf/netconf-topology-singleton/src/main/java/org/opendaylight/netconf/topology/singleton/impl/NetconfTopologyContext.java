@@ -62,11 +62,15 @@ class NetconfTopologyContext implements ClusterSingletonService, AutoCloseable {
         remoteDeviceId = NetconfTopologyUtils.createRemoteDeviceId(netconfTopologyDeviceSetup.getNode().getNodeId(),
                 netconfTopologyDeviceSetup.getNode().getAugmentation(NetconfNode.class));
 
+        // RemoteDeviceConnectorImpl：用于主动连接底层device，封装相关方法
         remoteDeviceConnector = new RemoteDeviceConnectorImpl(netconfTopologyDeviceSetup, remoteDeviceId);
 
         netconfNodeManager = createNodeDeviceManager();
     }
 
+    /**
+     * 当当前节点选举成功该device的master时调用, 效果是当前节点主动连接底层Device
+     */
     @Override
     public void instantiateServiceInstance() {
         LOG.info("Master was selected: {}", remoteDeviceId.getHost().getIpAddress());
@@ -87,6 +91,9 @@ class NetconfTopologyContext implements ClusterSingletonService, AutoCloseable {
                     actorResponseWaitTime, mountService),
                     NetconfTopologyUtils.createMasterActorName(remoteDeviceId.getName(), masterAddress));
 
+            /*
+                先创建MasterSalFacade对象，再调用startRemoteDeviceConnection方法
+             */
             remoteDeviceConnector.startRemoteDeviceConnection(newMasterSalFacade());
         }
 

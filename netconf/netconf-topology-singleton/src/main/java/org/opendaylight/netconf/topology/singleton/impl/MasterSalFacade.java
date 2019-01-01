@@ -76,12 +76,14 @@ class MasterSalFacade implements AutoCloseable, RemoteDeviceHandler<NetconfSessi
 
         LOG.info("Device {} connected - registering master mount point", id);
 
+        // 注册mountpoint, 只有master节点才会注册
         registerMasterMountPoint();
 
         sendInitialDataToActor().onComplete(new OnComplete<Object>() {
             @Override
             public void onComplete(final Throwable failure, final Object success) {
                 if (failure == null) {
+                    // 更新operational yang数据，包括connected / capability以及master-node-address
                     updateDeviceData();
                     return;
                 }
