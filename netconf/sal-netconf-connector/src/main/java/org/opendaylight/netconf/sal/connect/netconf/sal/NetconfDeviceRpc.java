@@ -41,6 +41,23 @@ public final class NetconfDeviceRpc implements DOMRpcService {
     private final MessageTransformer<NetconfMessage> transformer;
     private final Collection<DOMRpcIdentifier> availableRpcs;
 
+    /**
+     * 有两个地方实例化NetconfDeviceRpc，netconfDevice.onRemoteSessionUp
+     * 	1.首先会传入BaseSchema创建NetconfDeviceRpc
+     * 		netconf标准的几个RPC
+     * 	2.其次会在netconf协商后（学习到device自身的额外支出的Rpc），在NetconfDevice.SchemaSetup中创建
+     * 		device特有的RPC:
+     *          在NetconfDevice.setUpSchema过程中创建device对应的RPC类，后续会在一路调用链:
+     *              NetconfDeviceSalFacade.onDeviceConnected -> NetconfDeviceSalProvider.mountInstance.onTopologyDeviceConnected
+     *
+     *      最终在mountInstance.onTopologyDeviceConnected中将此NetconfDeviceRpc对象注册到DOMMountPointService！
+     *      上层应用调用时从DOMMountPointService中拿到的DOMRPCService，其实是当前NetconfDeviceRpc对象！
+     *
+     * @param schemaContext
+     * @param communicator 封装底层，请求communicator就是请求底层device设备
+     * @param transformer transformer是在NetconfDevice中已经根据协议交互的yang rpc(SchemaContext)构建好的对象
+     *  个人理解是已经有对应netconf rpc及数据结构map映射，用于后续跟进input node yang对象翻译为NetconfMessage
+     */
     public NetconfDeviceRpc(final SchemaContext schemaContext,
             final RemoteDeviceCommunicator<NetconfMessage> communicator,
             final MessageTransformer<NetconfMessage> transformer) {
@@ -55,7 +72,12 @@ public final class NetconfDeviceRpc implements DOMRpcService {
     @Override
     public CheckedFuture<DOMRpcResult, DOMRpcException> invokeRpc(@Nonnull final SchemaPath type,
                                                                   @Nullable final NormalizedNode<?, ?> input) {
+        /*
+            MessageTransformer是用于将控制层传入的yang normalized node对象 翻译为 对应netconf RPC数据结构的NetconfMessage对象。
+            用于将控制层传入的yang NormalizedNode对象 翻译为 对应netconf RPC数据结构的NetconfMessage
+         */
         final NetconfMessage message = transformer.toRpcRequest(type, input);
+        // 已经换好为对应的NetconfMessage
         final ListenableFuture<RpcResult<NetconfMessage>> delegateFutureWithPureResult =
                 communicator.sendRequest(message, type.getLastComponent());
 

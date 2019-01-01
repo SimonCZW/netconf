@@ -28,6 +28,7 @@ public final class TopologyUtil {
      * Determines the Netconf Node Node ID, given the node's instance
      * identifier.
      *
+     * 一个获取NodeId的方法，key
      * @param pathArgument Node's path argument
      * @return     NodeId for the node
      */
@@ -42,6 +43,9 @@ public final class TopologyUtil {
         throw new IllegalStateException("Unable to create NodeId from: " + pathArgument);
     }
 
+    /**
+     * NetconfTopologyImpl中调用，用于创建network-topology的IId（topology-netconf）
+     */
     public static KeyedInstanceIdentifier<Topology, TopologyKey> createTopologyListPath(final String topologyId) {
         final InstanceIdentifier<NetworkTopology> networkTopology = InstanceIdentifier.create(NetworkTopology.class);
         return networkTopology.child(Topology.class, new TopologyKey(new TopologyId(topologyId)));
