@@ -141,7 +141,9 @@ class MasterSalFacade implements AutoCloseable, RemoteDeviceHandler<NetconfSessi
         return new NetconfDeviceDataBroker(id, currentSchemaContext, deviceRpc, netconfSessionPreferences);
     }
 
+    // device连上控制器，给masterActorRef发送初始的数据
     private Future<Object> sendInitialDataToActor() {
+        // device支持的netconf rpc能力
         final List<SourceIdentifier> sourceIdentifiers =
                 SchemaContextUtil.getConstituentModuleIdentifiers(currentSchemaContext).stream()
                 .map(mi -> RevisionSourceIdentifier.create(mi.getName(), mi.getRevision()))

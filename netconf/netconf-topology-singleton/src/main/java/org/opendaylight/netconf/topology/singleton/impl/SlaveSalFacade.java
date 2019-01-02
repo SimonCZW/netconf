@@ -41,6 +41,9 @@ public class SlaveSalFacade {
         this.actorResponseWaitTime = actorResponseWaitTime;
     }
 
+    /**
+     * 在slave控制器节点才会调用，注册Proxy类等到本地的DOMMountPointService
+     */
     public void registerSlaveMountPoint(final SchemaContext remoteSchemaContext, final DOMRpcService deviceRpc,
                                         final ActorRef masterActorRef) {
         if (!registered.compareAndSet(false, true)) {

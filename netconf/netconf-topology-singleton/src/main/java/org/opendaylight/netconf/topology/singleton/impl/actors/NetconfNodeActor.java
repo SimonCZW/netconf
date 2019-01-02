@@ -138,11 +138,16 @@ public class NetconfNodeActor extends AbstractUntypedActor {
             id = ((RefreshSetupMasterActorData) message).getRemoteDeviceId();
             sender().tell(new MasterActorDataInitialized(), self());
         } else if (message instanceof AskForMasterMountPoint) { // master
+            /*
+                在NetconfNodeManager.handleSlaveMountPoint中，当设备连上控制器时，发出消息给master节点，只有master节点会收到此消息并处理.
+             */
+
             AskForMasterMountPoint askForMasterMountPoint = (AskForMasterMountPoint)message;
 
             // only master contains reference to deviceDataBroker
             if (deviceDataBroker != null) {
                 LOG.debug("{}: Sending RegisterMountPoint reply to {}", id, askForMasterMountPoint.getSlaveActorRef());
+                // master节点获取slaveActorRef并回复RegisterMountPoint消息，告诉其当前device支持的netconf rpc等信息（sourceIdentifiers是从SchemaContext转换过来的）
                 askForMasterMountPoint.getSlaveActorRef().tell(new RegisterMountPoint(sourceIdentifiers, self()),
                         sender());
             } else {
@@ -177,12 +182,25 @@ public class NetconfNodeActor extends AbstractUntypedActor {
                 sender().tell(t, self());
             }
         } else if (message instanceof InvokeRpcMessage) { // master
+            /*
+             * 在ProxyDOMRpcService中发送该消息。
+             * 在slave控制器上如果对device请求rpc，获取的是 ProxyDOMRpcService对象，其效果是构造InvokeRpcMessage发送给master处理
+             */
+
             final InvokeRpcMessage invokeRpcMessage = (InvokeRpcMessage) message;
+            // 处理slave控制器调用device的rpc
             invokeSlaveRpc(invokeRpcMessage.getSchemaPath(), invokeRpcMessage.getNormalizedNodeMessage(), sender());
 
         } else if (message instanceof RegisterMountPoint) { //slaves
+            /*
+             * 在NetconfNodeManager.handleSlaveMountPoint中，当设备连上控制器时，slave发出AskForMasterMountPoint消息给master节点，
+             * master节点回复RegisterMountPoint消息（告知device支持的netconf rpc）。 可参考上面AskForMasterMountPoint的处理过程。
+             */
+
             RegisterMountPoint registerMountPoint = (RegisterMountPoint)message;
+            // device支持的netconf rpc（sourceIdentifiers是从SchemaContext转换过来的）
             sourceIdentifiers = registerMountPoint.getSourceIndentifiers();
+            // 创建SlaveSalFacade并注册SlaveMountPoint等（proxy类）
             registerSlaveMountPoint(registerMountPoint.getMasterActorRef());
             sender().tell(new Success(null), self());
         } else if (message instanceof UnregisterSlaveMountPoint) { //slaves
@@ -251,6 +269,7 @@ public class NetconfNodeActor extends AbstractUntypedActor {
                 LOG.debug("{}: invokeSlaveRpc for {}, domRpcResult: {}", id, schemaPath, domRpcResult);
 
                 if (domRpcResult == null) {
+                    // 回复slave控制器节点
                     recipient.tell(new EmptyResultResponse(), getSender());
                     return;
                 }
@@ -259,6 +278,7 @@ public class NetconfNodeActor extends AbstractUntypedActor {
                     nodeMessageReply = new NormalizedNodeMessage(YangInstanceIdentifier.EMPTY,
                             domRpcResult.getResult());
                 }
+                // 回复slave控制器节点
                 recipient.tell(new InvokeRpcMessageReply(nodeMessageReply, domRpcResult.getErrors()), getSelf());
             }
 
@@ -272,8 +292,16 @@ public class NetconfNodeActor extends AbstractUntypedActor {
     private void registerSlaveMountPoint(final ActorRef masterReference) {
         unregisterSlaveMountPoint();
 
+        // 创建SlaveSalFacade
         slaveSalManager = new SlaveSalFacade(id, setup.getActorSystem(), actorResponseWaitTime, mountPointService);
 
+        /*
+         * 干了几个事：
+         * 1.创建SchemaContextFactory
+         * 2.将device的sourceIdentifiers反解析为SchemaContext(netconf rpc能力)
+         * 3.创建ProxyDOMRpcService对象（代理master节点的DOMRpcService，其效果是走akka让master请求底层device）
+         * 4.调用SlaveSalFacade.registerSlaveMountPoint注册device的本地MountPoint（各种Proxy类，与master节点有区别）到本地DOMMountPointService
+         */
         resolveSchemaContext(createSchemaContextFactory(masterReference), slaveSalManager, masterReference, 1);
     }
 
@@ -298,6 +326,7 @@ public class NetconfNodeActor extends AbstractUntypedActor {
 
     private void resolveSchemaContext(final SchemaContextFactory schemaContextFactory,
             final SlaveSalFacade localSlaveSalManager, final ActorRef masterReference, int tries) {
+        // 反解析SchemaContext
         final ListenableFuture<SchemaContext> schemaContextFuture =
                 schemaContextFactory.createSchemaContext(sourceIdentifiers);
         Futures.addCallback(schemaContextFuture, new FutureCallback<SchemaContext>() {
@@ -309,6 +338,11 @@ public class NetconfNodeActor extends AbstractUntypedActor {
                     if (slaveSalManager == localSlaveSalManager) {
                         LOG.info("{}: Schema context resolved: {} - registering slave mount point",
                                 id, result.getModules());
+                        /*
+                            先创建ProxyDOMRpcService对象（代理master节点的DOMRpcService，其效果是走akka让master请求底层device）
+
+                            注册MountPoint到本地的DOMMountPointService，只不过mountPoint包含的对象是ProxyDOMRpcService，ProxyDOMDataBroker等
+                         */
                         slaveSalManager.registerSlaveMountPoint(result, getDOMRpcService(masterReference),
                                 masterReference);
                     }

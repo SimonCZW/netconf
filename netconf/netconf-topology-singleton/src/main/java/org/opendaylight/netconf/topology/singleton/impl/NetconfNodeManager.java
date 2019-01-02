@@ -83,6 +83,12 @@ class NetconfNodeManager
         this.mountPointService = mountPointService;
     }
 
+    /**
+     * 该方法只会在slave节点中触发。
+     *
+     * 在NetconfTopologyContext.instantiateServiceInstance方法中，如果选举出当前节点是master，则调用当前对象的close方法，
+     * 取消netconfNodeManager中对node状态的监听，因为当前对象的处理用于创建sal mount point等，master节点则不需要
+     */
     @Override
     public void onDataTreeChanged(@Nonnull final Collection<DataTreeModification<Node>> changes) {
         for (final DataTreeModification<Node> change : changes) {
@@ -92,6 +98,12 @@ class NetconfNodeManager
                 case SUBTREE_MODIFIED:
                     LOG.debug("{}: Operational state for node {} - subtree modified from {} to {}",
                             id, nodeId, rootNode.getDataBefore(), rootNode.getDataAfter());
+                    /*
+                        当选举出控制器节点master后，NetconfTopologyContext中会主动连接底层，
+                        并且在底层连上后，会回写operational yang更新状态及写上master节点IP，这个时候就触发了当前方法！
+
+                        只要node状态变化，则处理SlaveMountPoint，至于当前节点是否是master在后续的NetconfNodeActor akka处理中会有判断
+                     */
                     handleSlaveMountPoint(rootNode);
                     break;
                 case WRITE:
@@ -102,6 +114,12 @@ class NetconfNodeManager
                         LOG.debug("{}: Operational state for node {} created: {}",
                                 id, nodeId, rootNode.getDataAfter());
                     }
+                    /*
+                        当选举出控制器节点master后，NetconfTopologyContext中会主动连接底层，
+                        并且在底层连上后，会回写operational yang更新状态及写上master节点IP，这个时候就触发了当前方法！
+
+                        只要node状态变化，则处理SlaveMountPoint，至于当前节点是否是master在后续的NetconfNodeActor akka处理中会有判断
+                     */
                     handleSlaveMountPoint(rootNode);
                     break;
                 case DELETE:
@@ -160,20 +178,30 @@ class NetconfNodeManager
         @SuppressWarnings("ConstantConditions")
         final NetconfNode netconfNodeAfter = rootNode.getDataAfter().getAugmentation(NetconfNode.class);
 
+        // 已经连上device才开始处理
         if (NetconfNodeConnectionStatus.ConnectionStatus.Connected.equals(netconfNodeAfter.getConnectionStatus())) {
             lastUpdateCount++;
+            // 创建当前device当前控制器节点的actorRef
             createOrUpdateActorRef();
 
+            // 获取控制器master节点的IP
             final String masterAddress = netconfNodeAfter.getClusteredConnectionStatus().getNetconfMasterNode();
             final String masterActorPath = NetconfTopologyUtils.createActorPath(masterAddress,
                     NetconfTopologyUtils.createMasterActorName(id.getName(),
                             netconfNodeAfter.getClusteredConnectionStatus().getNetconfMasterNode()));
 
+            /*
+                akka消息AskForMasterMountPoint：用于当device连上控制器，无论slave/master都发送此消息到master节点，
+                    master节点再根据请求发送RegisterMountPoint消息，触发slave创建Slave mount point
+
+                备注：处理akka消息在 NetconfNodeActor类中
+             */
             final AskForMasterMountPoint askForMasterMountPoint = new AskForMasterMountPoint(slaveActorRef);
             final ActorSelection masterActor = setup.getActorSystem().actorSelection(masterActorPath);
 
             LOG.debug("{}: Sending {} message to master {}", id, askForMasterMountPoint, masterActor);
 
+            // 发送消息给master节点
             sendAskForMasterMountPointWithRetries(askForMasterMountPoint, masterActor, 1, lastUpdateCount);
         } else {
             unregisterSlaveMountpoint();

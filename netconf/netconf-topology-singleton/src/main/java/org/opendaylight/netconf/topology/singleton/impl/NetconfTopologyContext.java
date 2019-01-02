@@ -65,6 +65,12 @@ class NetconfTopologyContext implements ClusterSingletonService, AutoCloseable {
         // RemoteDeviceConnectorImpl：用于主动连接底层device，封装相关方法
         remoteDeviceConnector = new RemoteDeviceConnectorImpl(netconfTopologyDeviceSetup, remoteDeviceId);
 
+        /*
+            创建了device的manager，监听了operational yang当前node节点的改变(状态变化)
+            每个控制器节点都监听了当前node节点状态变化, 当节点连上控制器，会根据是master/slave做出对应处理（slave创建SlavSalFacade/ProxyDOMRpcService等）。
+
+            调用此方法此时还没选举出Master/slave节点，
+         */
         netconfNodeManager = createNodeDeviceManager();
     }
 
@@ -79,6 +85,7 @@ class NetconfTopologyContext implements ClusterSingletonService, AutoCloseable {
 
         // master should not listen on netconf-node operational datastore
         if (netconfNodeManager != null) {
+            // 如果选举出当前节点是master，则取消netconfNodeManager中对node状态的监听，其用于创建sal mount point等
             netconfNodeManager.close();
             netconfNodeManager = null;
         }
@@ -118,8 +125,10 @@ class NetconfTopologyContext implements ClusterSingletonService, AutoCloseable {
     }
 
     private NetconfNodeManager createNodeDeviceManager() {
+        // 创建NetconfNodeManager
         final NetconfNodeManager ndm =
                 new NetconfNodeManager(netconfTopologyDeviceSetup, remoteDeviceId, actorResponseWaitTime, mountService);
+        // 监听node节点状态变化
         ndm.registerDataTreeChangeListener(netconfTopologyDeviceSetup.getTopologyId(),
                 netconfTopologyDeviceSetup.getNode().getKey());
 

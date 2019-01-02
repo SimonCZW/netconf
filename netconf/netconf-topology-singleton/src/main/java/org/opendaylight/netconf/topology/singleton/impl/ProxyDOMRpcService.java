@@ -41,6 +41,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.concurrent.Future;
 
+/**
+ * 在集群环境下, slave节点在device连上控制器后，slave节点为device创建本地的DOMRpcService，
+ * 只不过该类作为代理，最终invokeRpc是通过akka发送InvokeRpcMessage消息到master，再由master调用底层device
+ */
 public class ProxyDOMRpcService implements DOMRpcService {
 
     private static final Logger LOG = LoggerFactory.getLogger(NetconfTopologyManager.class);
@@ -72,8 +76,10 @@ public class ProxyDOMRpcService implements DOMRpcService {
                                                                   @Nullable final NormalizedNode<?, ?> input) {
         LOG.trace("{}: Rpc operation invoked with schema type: {} and node: {}.", id, type, input);
 
+        // 封装NormalizedNode为NormalizedNodeMessage
         final NormalizedNodeMessage normalizedNodeMessage = input != null
                 ? new NormalizedNodeMessage(YangInstanceIdentifier.EMPTY, input) : null;
+        // 发送akka消息InvokeRpcMessage到master节点，让master请求底层device
         final Future<Object> scalaFuture = Patterns.ask(masterActorRef,
                 new InvokeRpcMessage(new SchemaPathMessage(type), normalizedNodeMessage), actorResponseWaitTime);
 
