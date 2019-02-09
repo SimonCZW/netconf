@@ -27,7 +27,7 @@ public class NetconfClientSession extends AbstractNetconfSession<NetconfClientSe
     /**
      * Construct a new session.
      *
-     * @param sessionListener    Netconf client session listener.
+     * @param sessionListener    Netconf client session listener. 是NetconfDeviceCommunicator对象
      * @param channel    Channel.
      * @param sessionId    Session Id.
      * @param capabilities    Set of advertised capabilities. Expected to be immutable.

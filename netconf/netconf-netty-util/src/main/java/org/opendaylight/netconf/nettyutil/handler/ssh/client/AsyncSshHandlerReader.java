@@ -36,6 +36,13 @@ public final class AsyncSshHandlerReader implements SshFutureListener<IoReadFutu
     private Buffer buf;
     private IoReadFuture currentReadFuture;
 
+    /**
+     * 监听ssh channel消息并作出对应操作
+     * @param connectionClosedCallback () -> AsyncSshHandler.this.disconnect(ctx, ctx.newPromise())，当连接异常触发netty channel disconnect操作
+     * @param readHandler 是 msg -> ctx.fireChannelRead(msg) ，当收到消息触发netty channel读取消息操作
+     * @param channelId
+     * @param asyncOut
+     */
     public AsyncSshHandlerReader(final AutoCloseable connectionClosedCallback, final ReadMsgHandler readHandler,
                                  final String channelId, final IoInputStream asyncOut) {
         this.connectionClosedCallback = connectionClosedCallback;
@@ -43,6 +50,7 @@ public final class AsyncSshHandlerReader implements SshFutureListener<IoReadFutu
         this.channelId = channelId;
         this.asyncOut = asyncOut;
         buf = new ByteArrayBuffer(BUFFER_SIZE);
+        // 监听ssh channel，当收到底层消息会触发 msg -> ctx.fireChannelRead(msg)
         asyncOut.read(buf).addListener(this);
     }
 
@@ -61,6 +69,7 @@ public final class AsyncSshHandlerReader implements SshFutureListener<IoReadFutu
             } else {
                 LOG.warn("Exception while reading from SSH remote on channel {}", channelId, future.getException());
             }
+            // ssh channel异常了
             invokeDisconnect();
             return;
         }
@@ -71,6 +80,7 @@ public final class AsyncSshHandlerReader implements SshFutureListener<IoReadFutu
                 LOG.trace("Reading message on channel: {}, message: {}",
                         channelId, AsyncSshHandlerWriter.byteBufToString(msg));
             }
+            // 当收到底层消息会触发 msg -> ctx.fireChannelRead(msg)
             readHandler.onMessageRead(msg);
 
             // Schedule next read

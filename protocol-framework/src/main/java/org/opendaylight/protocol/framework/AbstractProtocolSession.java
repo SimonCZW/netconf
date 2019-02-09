@@ -34,6 +34,7 @@ public abstract class AbstractProtocolSession<M> extends SimpleChannelInboundHan
      */
     protected abstract void sessionUp();
 
+    // channel inactive最终触发上层对象感知
     @Override
     public final void channelInactive(final ChannelHandlerContext ctx) {
         LOG.debug("Channel {} inactive.", ctx.channel());
@@ -46,6 +47,7 @@ public abstract class AbstractProtocolSession<M> extends SimpleChannelInboundHan
         }
     }
 
+    // 收到底层设备发送消息到channel，最终触发上层对象感知
     @Override
     @SuppressWarnings("unchecked")
     protected final void channelRead0(final ChannelHandlerContext ctx, final Object msg) {
@@ -53,6 +55,7 @@ public abstract class AbstractProtocolSession<M> extends SimpleChannelInboundHan
         handleMessage((M) msg);
     }
 
+    // 在NetconfClientSessionNegotiator中协商完成，就会将当前对象加入到pipeline中，然后触发sessionUp，让上层对象感知，
     @Override
     public final void handlerAdded(final ChannelHandlerContext ctx) {
         sessionUp();

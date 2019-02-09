@@ -77,20 +77,27 @@ public abstract class AbstractNetconfSessionNegotiator<P extends NetconfSessionP
         this.connectionTimeoutMillis = connectionTimeoutMillis;
     }
 
+    /**
+     * 由AbstarctSessionNegotiator.channelActive触发调用当前方法，当netty channel ok了开始协商.
+     */
     @Override
     protected final void startNegotiation() {
         final Optional<SslHandler> sslHandler = getSslHandler(channel);
+        // 首先判断当前netconf连接底层是否使用ssh,还是直接的tcp/ssl
         if (sslHandler.isPresent()) {
+            // 使用tcp/ssl情况下，等ssl握手完成
             Future<Channel> future = sslHandler.get().handshakeFuture();
             future.addListener(new GenericFutureListener<Future<? super Channel>>() {
                 @Override
                 public void operationComplete(final Future<? super Channel> future) {
                     Preconditions.checkState(future.isSuccess(), "Ssl handshake was not successful");
                     LOG.debug("Ssl handshake complete");
+                    // ssl已经ok了，开始netconf协商
                     start();
                 }
             });
         } else {
+            // 当是使用ssh情况下，AsyncSshHandler已经建立连接下，才会触发chanelActive，所以这里直接开启netconf协商即可
             start();
         }
     }
@@ -104,17 +111,24 @@ public abstract class AbstractNetconfSessionNegotiator<P extends NetconfSessionP
         return sessionPreferences;
     }
 
+    /**
+     * Netconf协议协商的过程：发送hello message.
+     */
     private void start() {
         final NetconfHelloMessage helloMessage = this.sessionPreferences.getHelloMessage();
         LOG.debug("Session negotiation started with hello message {} on channel {}", helloMessage, channel);
 
         channel.pipeline().addLast(NAME_OF_EXCEPTION_HANDLER, new ExceptionHandlingInboundChannelHandler());
 
+        // 发送hello消息
         sendMessage(helloMessage);
 
+        // 发送完hello消息后，pipeline中NETCONF_MESSAGE_ENCODER将NetconfHelloMessageToXMLEncoder替换为NetconfMessageToXMLEncoder
         replaceHelloMessageOutboundHandler();
+        // 修改netconf session状态为OPEN_WAIT
         changeState(State.OPEN_WAIT);
 
+        // 等待一段时间，检查session状态是否为ESTABLISHED. 状态的修改由另外的异步(hello message交互)实现
         timeout = this.timer.newTimeout(new TimerTask() {
             @Override
             @SuppressWarnings("checkstyle:hiddenField")
@@ -128,6 +142,7 @@ public abstract class AbstractNetconfSessionNegotiator<P extends NetconfSessionP
                         // It would result in setting result of the promise second time and that throws exception
                         if (!isPromiseFinished()) {
                             LOG.warn("Netconf session was not established after {}", connectionTimeoutMillis);
+                            // 修改状态为FAILED
                             changeState(State.FAILED);
 
                             channel.close().addListener(new GenericFutureListener<ChannelFuture>() {
@@ -170,6 +185,7 @@ public abstract class AbstractNetconfSessionNegotiator<P extends NetconfSessionP
             insertChunkFramingToPipeline();
         }
 
+        // 修改状态
         changeState(State.ESTABLISHED);
         return getSession(sessionListener, channel, netconfMessage);
     }
@@ -197,11 +213,13 @@ public abstract class AbstractNetconfSessionNegotiator<P extends NetconfSessionP
      * It caches any non-hello messages while negotiation is still in progress
      */
     protected final void replaceHelloMessageInboundHandler(final S session) {
+        // 接收完NetconfHelloMessage后，将pipeline中NetconfXMLToHelloMessageDecoder替换为NetconfXMLToMessageDecoder
         ChannelHandler helloMessageHandler = replaceChannelHandler(channel,
                 AbstractChannelInitializer.NETCONF_MESSAGE_DECODER, new NetconfXMLToMessageDecoder());
 
         Preconditions.checkState(helloMessageHandler instanceof NetconfXMLToHelloMessageDecoder,
                 "Pipeline handlers misplaced on session: %s, pipeline: %s", session, channel.pipeline());
+        // 取出在协商过程中收到的非NetconfHelloMessage，并在下面交给上层处理
         Iterable<NetconfMessage> netconfMessagesFromNegotiation =
                 ((NetconfXMLToHelloMessageDecoder) helloMessageHandler).getPostHelloNetconfMessages();
 

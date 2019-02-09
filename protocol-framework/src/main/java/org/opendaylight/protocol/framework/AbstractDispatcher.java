@@ -167,6 +167,7 @@ public abstract class AbstractDispatcher<S extends ProtocolSession<?>, L extends
         setWorkerGroup(b);
         setChannelFactory(b);
 
+        // 封装了重连操作，实际上还是 bootstrap.connect
         p.connect();
         LOG.debug("Client created.");
         return p;

@@ -74,6 +74,7 @@ public abstract class AbstractSessionNegotiator<M, S extends AbstractProtocolSes
     public final void channelActive(final ChannelHandlerContext ctx) {
         LOG.debug("Starting session negotiation on channel {}", channel);
         try {
+            // 当最底层netty channel active了，开始协商: AbstractNetconfSessionNegotiator.startNegotiation
             startNegotiation();
         } catch (final Exception e) {
             LOG.warn("Unexpected negotiation failure", e);
@@ -81,6 +82,9 @@ public abstract class AbstractSessionNegotiator<M, S extends AbstractProtocolSes
         }
     }
 
+    /**
+     * 底层设备回复消息，channel read读取
+     */
     @Override
     @SuppressWarnings("unchecked")
     public final void channelRead(final ChannelHandlerContext ctx, final Object msg) {

@@ -63,20 +63,32 @@ public class NetconfClientSessionNegotiator extends
         super(sessionPreferences, promise, channel, timer, sessionListener, connectionTimeoutMillis);
     }
 
+    /**
+     * 收到底层设备回复消息.
+     * 由AbstractSessionNegotiator.channelRead 调用
+     */
     @Override
     protected void handleMessage(final NetconfHelloMessage netconfMessage) throws NetconfDocumentedException {
+        // 收到底层回复hello说明协商完成，会修改session状态为ESTABLISH，并获取NetconfClientSession对象
         final NetconfClientSession session = getSessionForHelloMessage(netconfMessage);
+        /*
+            1.接收完NetconfHelloMessage后，将pipeline中NetconfXMLToHelloMessageDecoder替换为NetconfXMLToMessageDecoder；
+            2.取出在协商过程中收到的非NetconfHelloMessage，并交给上层处理；
+         */
         replaceHelloMessageInboundHandler(session);
 
         // If exi should be used, try to initiate exi communication
         // Call negotiationSuccessFul after exi negotiation is finished successfully or not
         if (shouldUseExi(netconfMessage)) {
+            // 额外效果是交互exi消息，替换pipeline中encode/decode的handler: NetconfEXIToMessageDecoder, NetconfMessageToEXIEncoder
             LOG.debug("Netconf session {} should use exi.", session);
             NetconfStartExiMessage startExiMessage = (NetconfStartExiMessage) sessionPreferences.getStartExiMessage();
             tryToInitiateExi(session, startExiMessage);
         } else {
             // Exi is not supported, release session immediately
             LOG.debug("Netconf session {} isn't capable of using exi.", session);
+
+            // 无论如何最终协商完成，在pipeline中将自身替换为NetconfClientSession
             negotiationSuccessful(session);
         }
     }

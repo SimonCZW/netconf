@@ -155,6 +155,9 @@ public class AsyncSshHandler extends ChannelOutboundHandlerAdapter {
         }
     }
 
+    /**
+     * SSH channel建立完成，创建相应writer和reader处理对ssh channel的写入和读取，让上层netconf可以通过ssh channel与底层设备交互
+     */
     private synchronized void handleSshChanelOpened(final ChannelHandlerContext ctx) {
         LOG.trace("SSH subsystem channel opened successfully on channel: {}", ctx.channel());
 
@@ -164,13 +167,20 @@ public class AsyncSshHandler extends ChannelOutboundHandlerAdapter {
 
         // TODO we should also read from error stream and at least log from that
 
+        /*
+            创建AsyncSshHandlerReader对象，其监听底层设备通过ssh channel
+            当收到底层发送给控制器的消息，触发ctx.fireChannelRead(msg)，通知netty channel中pipeline相关handler处理
+         */
         sshReadAsyncListener = new AsyncSshHandlerReader(() -> AsyncSshHandler.this.disconnect(ctx, ctx.newPromise()),
             msg -> ctx.fireChannelRead(msg), channel.toString(), channel.getAsyncOut());
 
         // if readAsyncListener receives immediate close,
         // it will close this handler and closing this handler sets channel variable to null
         if (channel != null) {
+            // 创建AsyncSshHandlerWriter对象，供上层netconf通过ssh channel发送消息到底层设备
             sshWriteAsyncHandler = new AsyncSshHandlerWriter(channel.getAsyncIn());
+
+            // 当reader和writer都创建完成，通知netty channel pipeline相关handler channelActive
             ctx.fireChannelActive();
         }
     }
@@ -186,11 +196,19 @@ public class AsyncSshHandler extends ChannelOutboundHandlerAdapter {
         disconnect(ctx, ctx.newPromise());
     }
 
+    /**
+     * 通过netty channel pipeline的write方法递归调用，最终write方法传递到最后一个outbound handler（AsyncSshHandler）
+     * 在这里我们可以看到，实际上是通过sshWriteAsyncHandler将消息写入ssh channel，且没有调用ctx.write或者super.write
+     */
     @Override
     public synchronized void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) {
         sshWriteAsyncHandler.write(ctx, msg, promise);
     }
 
+    /**
+     * 在NetconfClientDispatcherImpl(AbstractDispatcher).createClient中调用了brootstarp.connect方法.
+     * 会触发调用其outboundhandler的connect，即触发当前方法方法
+     */
     @Override
     public synchronized void connect(final ChannelHandlerContext ctx, final SocketAddress remoteAddress,
                                      final SocketAddress localAddress, final ChannelPromise promise) throws Exception {
@@ -215,6 +233,11 @@ public class AsyncSshHandler extends ChannelOutboundHandlerAdapter {
         disconnect(ctx, promise);
     }
 
+    /**
+     * 调用情景：
+     * 1.netty channel主动发起disconnect / handler close，都是主动情况；
+     * 2.在sshReadAsyncListener（AsyncSshHandlerReader）中，监听ssh channel读取消息时失败； TODO: 需要深入研究
+     */
     @SuppressWarnings("checkstyle:IllegalCatch")
     @Override
     public synchronized void disconnect(final ChannelHandlerContext ctx, final ChannelPromise promise) {
